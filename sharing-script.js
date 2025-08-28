@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const submitButton = document.getElementById('submitButton');
 
   // Yeni deployment URL'sini buraya yapıştır (Apps Script'ten al)
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAHI6FB6skawGtkKk6KUIbuRNjZU0zbSY9X9Em86I8zu7XOw2z2MW85zb97CQpR9CT6w/exec';
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxSNn-JFAYvCnob3bpTUP80jgydK568E99s0dWiTMk6jAePOe5GfRDo4DVOri9TA1lw5g/exec';
   const API_KEY = '12345ABC';
 
   let mediaRecorder;
