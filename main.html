@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+  <link rel="stylesheet" href="pop-up.css" />
+  <link rel="stylesheet" href="form-style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@400;600&display=swap" rel="stylesheet" />
+  <title>Düğün Anı Defteri</title>
+  <style>
+    /* İstersen özel CSS buraya eklenebilir */
+    .footer-note {
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      font-size: 0.9rem;
+      color: #4f3c3c;
+      z-index: 9999;
+    }
+
+    /* Status mesajı için yeni stiller - başarıyı daha göze hitap eder hale getir */
+    #statusMessage {
+      display: none;
+      padding: 12px 20px;
+      margin: 15px 0;
+      border-radius: 8px;
+      font-weight: 600;
+      text-align: center;
+      font-size: 1.1rem;
+      transition: all 0.3s ease-in-out; /* Yumuşak animasyon */
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      opacity: 0;
+      transform: translateY(10px); /* Başlangıçta hafif yukarı kayık */
+    }
+
+    #statusMessage.success {
+      background-color: #4CAF50; /* Yeşil başarı rengi */
+      color: white;
+      border-left: 5px solid #45a049;
+      opacity: 1;
+      transform: translateY(0); /* Animasyonlu giriş */
+    }
+
+    #statusMessage.success::before {
+      content: "✅ "; /* Başarı ikonu */
+      font-size: 1.2rem;
+    }
+
+    #statusMessage.error {
+      background-color: #f44336; /* Kırmızı hata rengi */
+      color: white;
+      border-left: 5px solid #da190b;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #statusMessage.error::before {
+      content: "❌ "; /* Hata ikonu */
+      font-size: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="popup">
+    <div class="hearts" id="hearts-container"></div>
+    <span>Hoş Geldiniz!</span>
+    <p>Düğünümüze özel anılarınızı bizimle paylaşın...</p>
+    <button id="closePopup"></button>
+  </div>
+
+  <div class="container" id="form-container" style="display: none;">
+    <h1 class="wedding-title">Melike & Vahdet's Wedding</h1>
+    <h2 class="header-h2-style">Mutlu Günümüzde Anılarımıza Sizden Bir İz Kalsın</h2>
+    <h4>Duygu ve Düşüncelerinizi Bizimle Paylaşın</h4>
+
+    <form id="memoryForm">
+      <label for="name">İsim Soyisim</label>
+      <input type="text" id="name" name="name" placeholder="Adınız ve Soyadınız" required />
+
+      <label>Paylaşım Türü</label>
+      <div class="input-selector">
+        <button type="button" class="active" data-type="text">📝 Metin Yaz</button>
+        <button type="button" data-type="audio">🎤 Ses Kaydı Gönder</button>
+        <button type="button" data-type="image">📷 Resim Yükle</button>
+        <button type="button" data-type="video">🎥 Video Ekle</button>
+      </div>
+
+      <div id="textInputGroup">
+        <label for="message">Duygu ve Düşünceleriniz</label>
+        <textarea id="message" name="message" rows="5" placeholder="Anı defterimize bir şeyler yazmak ister misiniz? 📖"></textarea>
+      </div>
+
+      <div id="audioInputGroup" style="display: none;">
+        <p>🎤 Aşağıdaki butona basarak doğrudan ses kaydı yapabilirsiniz</p>
+        <div id="audioControls">
+          <button type="button" id="recordButton">🎤</button>
+          <button type="button" id="stopButton" style="display:none;">Kaydı Durdur</button>
+        </div>
+        <audio id="audioPreview" controls style="display: none; width: 100%; margin-top: 15px;"></audio>
+        <input type="hidden" id="audioData" name="audioData" />
+      </div>
+
+      <div id="imageInputGroup" style="display: none;">
+        <label for="imageInput">📷 Fotoğrafınızı seçin</label>
+        <input type="file" id="imageInput" name="image" accept="image/*" multiple />
+        <div id="imagePreview" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 10px;"></div>
+      </div>
+
+      <div id="videoInputGroup" style="display: none;">
+        <label for="videoInput">🎥 Video seçin</label>
+        <input type="file" id="videoInput" name="video" accept="video/*" multiple />
+        <div id="videoPreview" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 10px;"></div>
+      </div>
+
+      <div class="loader" id="loader"></div>
+      <div id="statusMessage"></div>
+
+      <button type="submit" id="submitButton" class="submit-button">Gönder</button>
+    </form>
+  </div>
+  <p class="footer-note">© Vahdet. All Rights Reserved.</p>
+  <script src="sharing-script.js"></script>
+  <script src="popup-script.js"></script>
+</body>
+</html>

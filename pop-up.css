@@ -1,0 +1,110 @@
+/* Pop-up Stilleri */
+#popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(255,105,180,0.7) 0%, rgba(173,216,230,0.7) 50%),
+            url('wedding_background.jpg') center center / contain no-repeat;
+
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    font-size: 2rem;
+    text-align: center;
+    padding: 2rem;
+    backdrop-filter: blur(3px) brightness(0.6);
+    animation: fadeIn 0.8s ease-out;
+    box-shadow: 0 0 20px rgba(0,0,0,0.3);
+    overflow: hidden;
+    font-family: 'Montserrat', sans-serif;
+    
+}
+#popup p {
+  color: #fff;
+  font-size: 1.5rem;
+  margin-top: 1rem;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+}
+#popup::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    animation: shimmer 8s infinite linear;
+    z-index: -1;
+}
+
+
+#popup span {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    color: #ffebcd;
+    font-family: 'Great Vibes', cursive;
+    transform: rotate(-2deg);
+}
+
+.hearts {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.heart {
+    position: absolute;
+    opacity: 0;
+    animation: float 6s ease-in infinite;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes float {
+    0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    90% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-500px) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+/* Responsive Tasarım */
+@media (max-width: 768px) {
+    #popup {
+        font-size: 1.5rem;
+        padding: 1rem;
+    }
+    
+    #popup span {
+        font-size: 2.5rem;
+    }
+}
