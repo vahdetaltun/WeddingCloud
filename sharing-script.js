@@ -111,10 +111,10 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Tür değiştiğinde bildirim göster
       const typeNames = {
-        text: "metin mesajı",
-        audio: "ses kaydı",
-        image: "fotoğraf",
-        video: "video"
+        text: "Metin mesajı",
+        audio: "Ses kaydı",
+        image: "Fotoğraf",
+        video: "Video"
       };
       showToast(`${typeNames[type]} paylaşımı seçildi. ✨`, "info");
     });
