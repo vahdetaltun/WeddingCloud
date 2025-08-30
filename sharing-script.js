@@ -20,22 +20,38 @@ document.addEventListener('DOMContentLoaded', function() {
   const videoInput = document.getElementById('videoInput');
   const videoPreview = document.getElementById('videoPreview');
   const submitButton = document.getElementById('submitButton');
+  const imageSelectionInfo = document.getElementById('imageSelectionInfo');
+  const heartsContainer = document.getElementById('hearts-container');
 
-  // Yeni deployment URL'sini buraya yapıştır (Apps Script'ten al)
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxSNn-JFAYvCnob3bpTUP80jgydK568E99s0dWiTMk6jAePOe5GfRDo4DVOri9TA1lw5g/exec';
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby-WHdbVQYWbKc60SEMbl_Q7v3YpLaz3t9Ao82DbyybbsBKBDXbkPyn5_Wqv9ETmniTKw/exec';
   const API_KEY = '12345ABC';
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+  const MAX_IMAGE_COUNT = 10; // Maksimum 10 resim
+  const MAX_TOTAL_IMAGE_SIZE = 100 * 1024 * 1024; // Toplam 100MB
 
   let mediaRecorder;
   let audioChunks = [];
   let clientIP = "";
 
-  // Base64 array'leri yerine, orijinal dosya objelerini tut (bellek tasarrufu için)
-  let imageFiles = [];  // Resim dosyaları
-  let videoFiles = [];  // Video dosyaları
+  let base64Images = [];
+  let base64Videos = [];
+  let totalImageSize = 0;
+  let selectedFiles = []; // Seçilen dosyaları takip etmek için
 
-  // Boyut limitleri (byte cinsinden)
-  const MAX_FILE_SIZE = 25 * 1024 * 1024;  // 25MB per dosya
-  const MAX_TOTAL_SIZE = 200 * 1024 * 1024; // 200MB total
+  // Kalp animasyonu oluştur
+  function createHearts() {
+    const heartEmojis = ['💖', '💕', '💗', '💓', '💞', '💘'];
+    for (let i = 0; i < 15; i++) {
+      const heart = document.createElement('div');
+      heart.className = 'heart';
+      heart.textContent = heartEmojis[Math.floor(Math.random() * heartEmojis.length)];
+      heart.style.left = Math.random() * 100 + '%';
+      heart.style.animationDelay = Math.random() * 5 + 's';
+      heartsContainer.appendChild(heart);
+    }
+  }
+  
+  createHearts();
 
   // IP adresini al
   fetch("https://api64.ipify.org?format=json")
@@ -43,11 +59,41 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(data => { clientIP = data.ip; })
     .catch(() => { clientIP = "Bilinmiyor"; });
 
+  // Toast bildirim fonksiyonu
+  function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    toastContainer.appendChild(toast);
+    
+    // Toast'ı göster
+    setTimeout(() => toast.classList.add('show'), 10);
+    
+    // Toast'ı kaldır
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toastContainer.removeChild(toast), 300);
+    }, 5000);
+  }
+
   // Popup kapat, form göster
   closePopup.addEventListener('click', function() {
     popup.style.display = 'none';
     formContainer.style.display = 'block';
+    showToast("Anı defterimize hoş geldiniz! 💕", "info");
   });
+
+  // İsim doğrulama fonksiyonu
+  function isValidName(name) {
+    // Sadece nokta, virgül, tire gibi karakterlerden oluşan isimleri engelle
+    const invalidPattern = /^[.,\-_\s]+$/;
+    // En az 2 karakter ve geçerli harfler/kelimeler içermeli
+    const validPattern = /^[a-zA-ZçÇğĞıİöÖşŞüÜ\s]{2,}$/;
+    
+    return !invalidPattern.test(name) && validPattern.test(name);
+  }
 
   // Tür seçici butonlar
   selectorButtons.forEach(button => {
@@ -62,92 +108,223 @@ document.addEventListener('DOMContentLoaded', function() {
       videoInputGroup.style.display = type === 'video' ? 'block' : 'none';
 
       hideStatus();
+      
+      // Tür değiştiğinde bildirim göster
+      const typeNames = {
+        text: "metin mesajı",
+        audio: "ses kaydı",
+        image: "fotoğraf",
+        video: "video"
+      };
+      showToast(`${typeNames[type]} paylaşımı seçildi. ✨`, "info");
     });
   });
 
-  // Çoklu resim seçimi ve önizleme (boyut kontrolü ekle)
+  // Çoklu resim seçimi ve önizleme
   imageInput.addEventListener('change', function(e) {
     const files = Array.from(e.target.files);
-    imageFiles = [];  // Temizle
-    let totalSize = 0;
+    base64Images = [];
+    selectedFiles = [];
+    totalImageSize = 0;
     imagePreview.innerHTML = '';
+    imageSelectionInfo.style.display = 'none';
 
-    for (let file of files) {
-      if (file.size > MAX_FILE_SIZE) {
-        showStatus(`Resim "${file.name}" çok büyük (${(file.size / 1024 / 1024).toFixed(1)}MB). Max ${MAX_FILE_SIZE / 1024 / 1024}MB olmalı.`, "error");
-        return;
-      }
-      totalSize += file.size;
-      if (totalSize > MAX_TOTAL_SIZE) {
-        showStatus("Toplam resim boyutu çok büyük. Max " + (MAX_TOTAL_SIZE / 1024 / 1024) + "MB olmalı.", "error");
-        return;
-      }
+    if (files.length === 0) return;
 
-      imageFiles.push(file);
+    // Dosya sayısı kontrolü
+    if (files.length > MAX_IMAGE_COUNT) {
+      showToast(`En fazla ${MAX_IMAGE_COUNT} fotoğraf seçebilirsiniz. ❌`, "error");
+      this.value = '';
+      return;
+    }
 
-      // Önizleme için küçük base64 (sadece thumbnail, tam dosya değil)
+    // Toplam boyut kontrolü
+    const totalSize = files.reduce((total, file) => total + file.size, 0);
+    if (totalSize > MAX_TOTAL_IMAGE_SIZE) {
+      showToast("Toplam dosya boyutu 100MB sınırını aşıyor. ❌", "error");
+      this.value = '';
+      return;
+    }
+
+    // Dosya boyutu kontrolü
+    const oversizedFiles = files.filter(file => file.size > MAX_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      showToast("Bazı dosyalar 100MB sınırından büyük. ❌", "error");
+      this.value = '';
+      return;
+    }
+
+    // Seçim bilgisini göster
+    imageSelectionInfo.style.display = 'block';
+    imageSelectionInfo.innerHTML = `📊 ${files.length} fotoğraf seçildi - Toplam: ${formatFileSize(totalSize)}`;
+
+    // Dosyaları işle
+    files.forEach((file, index) => {
       const reader = new FileReader();
       reader.onload = function(event) {
-        const img = document.createElement('img');
-        img.src = event.target.result;
-        img.style.maxWidth = '100px';
-        img.style.maxHeight = '100px';
-        img.style.borderRadius = '5px';
-        img.style.objectFit = 'cover';
-        img.style.boxShadow = '0 0 5px rgba(0,0,0,0.3)';
-        imagePreview.appendChild(img);
+        const base64Data = event.target.result;
+        base64Images.push(base64Data);
+        selectedFiles.push({
+          base64: base64Data,
+          size: file.size,
+          name: file.name
+        });
+        totalImageSize += file.size;
+
+        // Dosya bilgisi ve önizleme göster
+        const fileInfo = document.createElement('div');
+        fileInfo.className = 'file-info';
+        fileInfo.dataset.index = index;
+        fileInfo.innerHTML = `
+          <div class="file-preview-with-image">
+            <img src="${base64Data}" class="file-preview-image" alt="${file.name}">
+            <div class="file-details">
+              <div class="file-name">${file.name}</div>
+              <div class="file-size">${formatFileSize(file.size)}</div>
+            </div>
+          </div>
+          <button type="button" class="remove-file" data-index="${index}">×</button>
+        `;
+        imagePreview.appendChild(fileInfo);
+        
+        // Kaldırma butonuna olay dinleyici ekle
+        const removeBtn = fileInfo.querySelector('.remove-file');
+        removeBtn.addEventListener('click', function() {
+          removeImage(this.dataset.index, file.size);
+        });
       };
-      reader.readAsDataURL(file);  // Thumbnail için, bellek sorunu yok
+      reader.readAsDataURL(file);
+    });
+    
+    if (files.length > 0) {
+      showToast(`${files.length} fotoğraf seçildi. 📸`, "success");
     }
-    showStatus(`${files.length} resim seçildi. Toplam: ${(totalSize / 1024 / 1024).toFixed(1)}MB`, "success");
   });
 
-  // Çoklu video seçimi ve önizleme (boyut kontrolü ekle, base64 YOK)
+  // Resim kaldırma fonksiyonu
+  function removeImage(index, size) {
+    // Dizilerden ilgili öğeyi kaldır
+    base64Images.splice(index, 1);
+    selectedFiles.splice(index, 1);
+    
+    // DOM'dan kaldır
+    const fileElement = document.querySelector(`.file-info[data-index="${index}"]`);
+    if (fileElement) {
+      fileElement.remove();
+    }
+    
+    // Tüm dosya elementlerinin index'lerini güncelle
+    const fileElements = document.querySelectorAll('.file-info');
+    fileElements.forEach((element, i) => {
+      element.dataset.index = i;
+      const removeBtn = element.querySelector('.remove-file');
+      removeBtn.dataset.index = i;
+    });
+    
+    // Toplam boyutu güncelle
+    totalImageSize -= size;
+    
+    // Seçili dosya sayısını güncelle
+    const remainingImages = imagePreview.querySelectorAll('.file-info').length;
+    
+    if (remainingImages === 0) {
+      imageSelectionInfo.style.display = 'none';
+      base64Images = [];
+      selectedFiles = [];
+    } else {
+      imageSelectionInfo.innerHTML = `📊 ${remainingImages} fotoğraf seçildi - Toplam: ${formatFileSize(totalImageSize)}`;
+    }
+    
+    showToast("Fotoğraf kaldırıldı. ❌", "info");
+  }
+
+  // Video seçim işlemi - DÜZELTİLMİŞ VERSİYON
   videoInput.addEventListener('change', function(e) {
-    const files = Array.from(e.target.files);
-    videoFiles = [];  // Temizle
-    let totalSize = 0;
+    handleVideoSelection(e.target.files[0]);
+  });
+
+  // Video seçim işlemini fonksiyona ayır
+  function handleVideoSelection(file) {
+    base64Videos = []; // Her seferinde array'ı temizle
     videoPreview.innerHTML = '';
 
-    for (let file of files) {
-      if (file.size > MAX_FILE_SIZE) {
-        showStatus(`Video "${file.name}" çok büyük (${(file.size / 1024 / 1024).toFixed(1)}MB). Max ${MAX_FILE_SIZE / 1024 / 1024}MB olmalı.`, "error");
-        return;
-      }
-      totalSize += file.size;
-      if (totalSize > MAX_TOTAL_SIZE) {
-        showStatus("Toplam video boyutu çok büyük. Max " + (MAX_TOTAL_SIZE / 1024 / 1024) + "MB olmalı.", "error");
-        return;
-      }
+    if (!file) return;
 
-      videoFiles.push(file);
-
-      // Önizleme için video elementi oluştur (base64 olmadan, URL.createObjectURL ile)
-      const video = document.createElement('video');
-      video.controls = true;
-      video.style.maxWidth = '150px';
-      video.style.maxHeight = '100px';
-      video.style.borderRadius = '5px';
-      video.src = URL.createObjectURL(file);  // Bellek dostu, revoke et (aşağıda)
-      videoPreview.appendChild(video);
+    // Dosya boyutu kontrolü
+    if (file.size > MAX_FILE_SIZE) {
+      showToast("Video 100MB sınırından büyük. Daha küçük bir video seçin. ❌", "error");
+      videoInput.value = '';
+      return;
     }
-    showStatus(`${files.length} video seçildi. Toplam: ${(totalSize / 1024 / 1024).toFixed(1)}MB`, "success");
 
-    // Önizleme URL'lerini temizle (memory leak önle)
-    setTimeout(() => {
-      videoPreview.querySelectorAll('video').forEach(v => URL.revokeObjectURL(v.src));
-    }, 10000);  // 10 sn sonra temizle
-  });
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      const base64Data = event.target.result;
+      base64Videos.push(base64Data);
+      createVideoPreview(base64Data, file);
+    };
+    reader.readAsDataURL(file);
+    
+    showToast("Video seçildi. 🎬", "success");
+  }
 
-  // Ses kaydı başlatma (değişmedi)
+  // Video önizleme oluştur
+  function createVideoPreview(base64Data, file) {
+    const videoElement = document.createElement('video');
+    videoElement.controls = true;
+    videoElement.style.maxWidth = '100%';
+    videoElement.style.borderRadius = '8px';
+    videoElement.style.marginTop = '15px';
+    
+    const source = document.createElement('source');
+    source.src = base64Data;
+    source.type = file.type;
+    videoElement.appendChild(source);
+
+    const fileInfo = document.createElement('div');
+    fileInfo.className = 'file-info';
+    fileInfo.innerHTML = `
+      <div class="file-preview-with-image">
+        <div style="width:60px; height:60px; display:flex; align-items:center; justify-content:center; background:#f0f0f0; border-radius:8px;">
+          <span style="font-size:24px;">🎥</span>
+        </div>
+        <div class="file-details">
+          <div class="file-name">${file.name}</div>
+          <div class="file-size">${formatFileSize(file.size)}</div>
+        </div>
+      </div>
+      <button type="button" class="remove-file" onclick="removeVideo()">×</button>
+    `;
+    
+    videoPreview.appendChild(fileInfo);
+    videoPreview.appendChild(videoElement);
+  }
+
+  // Video kaldırma fonksiyonu - YENİ EKLENDİ
+  window.removeVideo = function() {
+    base64Videos = []; // Array'ı temizle
+    videoInput.value = ''; // Input'u sıfırla
+    videoPreview.innerHTML = ''; // Önizlemeyi temizle
+    showToast("Video kaldırıldı. ❌", "info");
+  };
+
+  // Dosya boyutunu formatlama
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' bytes';
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    else return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  // Ses kaydı başlatma
   recordButton.addEventListener('click', async function() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      let options = { mimeType: "audio/webm" };
-      if (MediaRecorder.isTypeSupported("audio/mp4")) options = { mimeType: "audio/mp4" };
-      else if (MediaRecorder.isTypeSupported("audio/wav")) options = { mimeType: "audio/wav" };
-      else if (MediaRecorder.isTypeSupported("audio/3gpp")) options = { mimeType: "audio/3gpp" };
+      // Tarayıcıya göre uygun format seç
+      let options = { mimeType: "audio/webm" }; // varsayılan
+      if (MediaRecorder.isTypeSupported("audio/mp4")) options = { mimeType: "audio/mp4" }; // Safari / iOS
+      else if (MediaRecorder.isTypeSupported("audio/wav")) options = { mimeType: "audio/wav" }; // diğer
+      else if (MediaRecorder.isTypeSupported("audio/3gpp")) options = { mimeType: "audio/3gpp" }; // Android eski
 
       mediaRecorder = new MediaRecorder(stream, options);
       audioChunks = [];
@@ -164,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const reader = new FileReader();
         reader.onloadend = function() {
-          audioDataInput.value = reader.result;
+          audioDataInput.value = reader.result; // Base64 olarak sakla
         };
         reader.readAsDataURL(audioBlob);
       };
@@ -172,134 +349,22 @@ document.addEventListener('DOMContentLoaded', function() {
       mediaRecorder.start();
       recordButton.disabled = true;
       stopButton.style.display = 'inline-block';
-      showStatus("Kayıt başladı...", "success");
+      showToast("Ses kaydı başladı... 🎤", "info");
     } catch (err) {
-      showStatus("Mikrofon erişimi reddedildi: " + err.message, "error");
+      showToast("Mikrofona erişim izni vermeniz gerekiyor. 🎤", "error");
     }
   });
 
-  // Ses kaydını durdurma (değişmedi)
+  // Ses kaydını durdurma
   stopButton.addEventListener('click', function() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
       recordButton.disabled = false;
       stopButton.style.display = 'none';
       mediaRecorder.stream.getTracks().forEach(track => track.stop());
-      showStatus("Kayıt tamamlandı", "success");
+      showToast("Ses kaydı tamamlandı. 🎶", "success");
     }
   });
-
-  // Yardımcı fonksiyon: Progress ile XMLHttpRequest gönder
-  function sendWithProgress(formData, onProgress) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', SCRIPT_URL, true);
-
-      // CORS için gerekli başlıkları ekle
-      xhr.setRequestHeader('Accept', 'application/json');
-
-      xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 100);
-          onProgress(percent);
-        }
-      };
-
-      xhr.onload = function() {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const result = JSON.parse(xhr.responseText);
-            resolve(result);
-          } catch (err) {
-            reject(new Error(`JSON parse error: ${xhr.responseText}`));
-          }
-        } else {
-          reject(new Error(`HTTP error! status: ${xhr.status} - ${xhr.statusText || 'Unknown server error'}`));
-        }
-      };
-
-      xhr.onerror = function() {
-        reject(new Error('CORS or network error: Failed to connect to server or request was aborted. Check SCRIPT_URL and deployment settings.'));
-      };
-
-      xhr.onabort = function() {
-        reject(new Error('Request aborted by client'));
-      };
-
-      xhr.send(formData);
-    });
-  }
-
-  // Yardımcı fonksiyon: Tek dosya veya array'i yükle (progress ile)
-  async function uploadFiles(files, type, name) {
-    let successCount = 0;
-    const totalFiles = files.length;
-    let totalUploadedBytes = 0;
-    let totalBytes = 0;
-
-    // Toplam boyutu hesapla
-    files.forEach(file => totalBytes += file.size);
-
-    for (let i = 0; i < totalFiles; i++) {
-      const file = files[i];
-      let currentFileUploaded = 0;
-      let isComplete = false;
-
-      // Progress güncelleme interval'i (sürekli bildirim)
-      const progressInterval = setInterval(() => {
-        if (isComplete) {
-          clearInterval(progressInterval);
-          return;
-        }
-        const currentPercent = Math.round((currentFileUploaded / file.size) * 100);
-        const overallPercent = Math.round((totalUploadedBytes / totalBytes) * 100);
-        updateStatus(`${type.charAt(0).toUpperCase() + type.slice(1)} yükleniyor: ${i + 1}/${totalFiles} (%${currentPercent}) - Toplam: %${overallPercent}`, "success");
-      }, 500);  // Her 500ms güncelle
-
-      // Base64'e çevir
-      const reader = new FileReader();
-      await new Promise((resolve, reject) => {
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('FileReader error: Failed to read file'));
-        reader.readAsDataURL(file);
-      });
-
-      const base64Data = reader.result;
-      const formData = new FormData();
-      formData.append('key', API_KEY);
-      formData.append('name', name);
-      formData.append('type', type);
-      formData.append('ip', clientIP);
-      formData.append('files', JSON.stringify([base64Data]));
-
-      try {
-        const result = await sendWithProgress(formData, (percent) => {
-          currentFileUploaded = (percent / 100) * file.size;
-          totalUploadedBytes = totalUploadedBytes + currentFileUploaded - (previousUploaded || 0);
-          previousUploaded = currentFileUploaded;
-        });
-
-        if (!result.success) throw new Error(result.message || "Bilinmeyen sunucu hatası");
-
-        successCount++;
-        totalUploadedBytes += file.size;
-        isComplete = true;
-        clearInterval(progressInterval);
-        updateStatus(`${type.charAt(0).toUpperCase() + type.slice(1)} ${i + 1}/${totalFiles} tamamlandı! (%100) - Toplam: %${Math.round((totalUploadedBytes / totalBytes) * 100)}`, "success");
-      } catch (error) {
-        isComplete = true;
-        clearInterval(progressInterval);
-        console.error(`Hata (Dosya ${i + 1}/${totalFiles}):`, error.message, error);
-        updateStatus(`${type.charAt(0).toUpperCase() + type.slice(1)} ${i + 1}/${totalFiles} hatası: ${error.message}`, "error");
-        return false;
-      }
-
-      // Memory temizle
-      delete reader.result;
-    }
-
-    return successCount === totalFiles;
-  }
 
   // Form gönderimi
   form.addEventListener('submit', async function(e) {
@@ -310,120 +375,97 @@ document.addEventListener('DOMContentLoaded', function() {
     const message = document.getElementById('message').value.trim();
     const audioData = audioDataInput.value;
 
-    if (!name) { showStatus("Lütfen isminizi girin", "error"); return; }
-    if (activeType === 'text' && !message) { showStatus("Lütfen bir mesaj yazın", "error"); return; }
-    if (activeType === 'audio' && !audioData) { showStatus("Lütfen bir ses kaydı yapın", "error"); return; }
-    if (activeType === 'image' && imageFiles.length === 0) { showStatus("Lütfen en az bir resim seçin", "error"); return; }
-    if (activeType === 'video' && videoFiles.length === 0) { showStatus("Lütfen en az bir video seçin", "error"); return; }
+    // İsim doğrulama
+    if (!name) { 
+      showToast("Lütfen isminizi yazın ki anınızı kime saklayacağımızı bilelim. 😊", "error"); 
+      return; 
+    }
+    
+    if (!isValidName(name)) {
+      showToast("Lütfen geçerli bir isim girin. Sadece özel karakterler içeren isimler kabul edilemez. ❌", "error");
+      return;
+    }
+    
+    if (activeType === 'text' && !message) { 
+      showToast("Anı defterimiz için güzel bir mesaj yazmanızı rica ediyoruz. 💌", "error"); 
+      return; 
+    }
+    
+    if (activeType === 'audio' && !audioData) { 
+      showToast("Lütfen bizim için güzel bir ses kaydı yapın. 🎤", "error"); 
+      return; 
+    }
+    
+    if (activeType === 'image' && base64Images.length === 0) { 
+      showToast("En az bir fotoğraf seçerek anılarımıza renk katın. 📸", "error"); 
+      return; 
+    }
+    
+    if (activeType === 'video' && base64Videos.length === 0) { 
+      showToast("Bir video seçerek anılarımızı hareketlendirin. 🎬", "error"); 
+      return; 
+    }
+
+    const formData = new FormData();
+    formData.append('key', API_KEY);
+    formData.append('name', name);
+    formData.append('type', activeType);
+    formData.append('ip', clientIP);
+
+    if (activeType === 'text') formData.append('message', message);
+    else if (activeType === 'audio') formData.append('file', audioData);
+    else if (activeType === 'image') formData.append('files', JSON.stringify(base64Images));
+    else if (activeType === 'video') formData.append('files', JSON.stringify(base64Videos));
 
     loader.style.display = 'block';
     submitButton.disabled = true;
     hideStatus();
 
-    let success = false;
-
     try {
-      if (activeType === 'text') {
-        const formData = new FormData();
-        formData.append('key', API_KEY);
-        formData.append('name', name);
-        formData.append('type', activeType);
-        formData.append('ip', clientIP);
-        formData.append('message', message);
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const result = await response.json();
 
-        const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} - ${response.statusText || 'Unknown server error'}`);
-        const result = await response.json();
-        success = result.success;
-        if (success) {
-          showStatus(result.message || "Başarıyla gönderildi!", "success");
-        } else {
-          console.error('Text upload error:', result.message);
-          showStatus(result.message || "Metin gönderimi başarısız oldu", "error");
-        }
-      } else if (activeType === 'audio') {
-        const formData = new FormData();
-        formData.append('key', API_KEY);
-        formData.append('name', name);
-        formData.append('type', activeType);
-        formData.append('ip', clientIP);
-        formData.append('file', audioData);
-
-        const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} - ${response.statusText || 'Unknown server error'}`);
-        const result = await response.json();
-        success = result.success;
-        if (success) {
-          showStatus(result.message || "Başarıyla gönderildi!", "success");
-        } else {
-          console.error('Audio upload error:', result.message);
-          showStatus(result.message || "Ses gönderimi başarısız oldu", "error");
-        }
-      } else if (activeType === 'image' || activeType === 'video') {
-        const files = activeType === 'image' ? imageFiles : videoFiles;
-        updateStatus(`${activeType === 'image' ? 'Resim' : 'Video'} yükleme başlıyor...`, "success");
-        success = await uploadFiles(files, activeType, name);
-        if (success) {
-          showStatus(`${activeType === 'image' ? 'Resimleriniz' : 'Videolarınız'} başarıyla yüklenmiştir! 🎉`, "success");
-        }
-      }
-
-      if (success) {
-        // Reset
+      if (result.success) {
+        showToast("Anınız başarıyla kaydedildi! Bizimle paylaştığınız için teşekkür ederiz. 💖", "success");
         form.reset();
         audioPreview.style.display = 'none';
         imagePreview.innerHTML = '';
         videoPreview.innerHTML = '';
-        imageFiles = [];
-        videoFiles = [];
+        imageSelectionInfo.style.display = 'none';
         selectorButtons.forEach(btn => btn.classList.remove('active'));
         selectorButtons[0].classList.add('active');
         textInputGroup.style.display = 'block';
         audioInputGroup.style.display = 'none';
         imageInputGroup.style.display = 'none';
         videoInputGroup.style.display = 'none';
+
+        base64Images = [];
+        base64Videos = [];
+        selectedFiles = [];
+        totalImageSize = 0;
         audioDataInput.value = "";
       } else {
-        showStatus("Gönderim başarısız oldu: Lütfen hata detaylarını kontrol edin", "error");
+        showToast("Bir şeyler ters gitti. Lütfen daha sonra tekrar deneyin. 😔", "error");
       }
     } catch (error) {
-      console.error('General error:', error.message, error);
-      showStatus("Hata oluştu: " + error.message, "error");
+      showToast("Bağlantı hatası oluştu. Lütfen internet bağlantınızı kontrol edin. 🌐", "error");
+      console.error('Error:', error);
     } finally {
       loader.style.display = 'none';
       submitButton.disabled = false;
     }
   });
 
-  // Progress için özel status güncelleme (timeout yok, kalıcı)
-  function updateStatus(message, type) {
-    statusMessage.textContent = message;
-    statusMessage.className = type;
-    statusMessage.style.display = 'block';
-    setTimeout(() => {
-      statusMessage.style.opacity = '1';
-      statusMessage.style.transform = 'translateY(0)';
-    }, 10);
-    // Timeout yok - yükleme bitene kadar kal
-  }
-
-  // Eski showStatus (başarı/hata için, timeout'lu)
   function showStatus(message, type) {
     statusMessage.textContent = message;
     statusMessage.className = type;
     statusMessage.style.display = 'block';
-    setTimeout(() => {
-      statusMessage.style.opacity = '1';
-      statusMessage.style.transform = 'translateY(0)';
-    }, 10);
-    const timeoutDuration = type === 'success' ? 7000 : 5000;
-    setTimeout(hideStatus, timeoutDuration);
+    setTimeout(hideStatus, 5000);
   }
 
   function hideStatus() {
     statusMessage.style.display = 'none';
-    statusMessage.style.opacity = '0';
-    statusMessage.style.transform = 'translateY(10px)';
     statusMessage.textContent = '';
   }
 });

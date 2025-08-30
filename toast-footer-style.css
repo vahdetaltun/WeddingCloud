@@ -1,0 +1,184 @@
+/* Toast bildirimleri */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .toast {
+      padding: 15px 20px;
+      border-radius: 8px;
+      color: white;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      opacity: 0;
+      transform: translateX(100%);
+      transition: all 0.3s ease;
+      max-width: 300px;
+    }
+    
+    .toast.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    
+    .toast.success {
+      background-color: #4CAF50;
+    }
+    
+    .toast.error {
+      background-color: #F44336;
+    }
+    
+    .toast.info {
+      background-color: #2196F3;
+    }
+    
+    /* Dosya yükleme stilleri */
+    .file-input-container {
+      position: relative;
+      margin-top: 15px;
+    }
+    
+    .file-input-label {
+      display: block;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+      border: 2px dashed #c3cfe2;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .file-input-label:hover {
+      background: linear-gradient(135deg, #e4e8f0 0%, #d5dbe6 100%);
+      border-color: #a5b4d4;
+    }
+    
+    .file-input-label i {
+      font-size: 24px;
+      margin-right: 8px;
+      color: #6c7a89;
+    }
+    
+    .file-input {
+      position: absolute;
+      opacity: 0;
+      width: 0.1px;
+      height: 0.1px;
+      overflow: hidden;
+      z-index: -1;
+    }
+    
+    .file-preview-container {
+      margin-top: 20px;
+    }
+    
+    .file-info {
+      background-color: #f8f9fa;
+      padding: 12px 15px;
+      border-radius: 8px;
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .file-preview-with-image {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .file-preview-image {
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .file-details {
+      flex-grow: 1;
+    }
+    
+    .file-name {
+      font-weight: 500;
+      color: #4f3c3c;
+      margin-bottom: 5px;
+    }
+    
+    .file-size {
+      color: #6c757d;
+      font-size: 0.9em;
+    }
+    
+    .remove-file {
+      background: none;
+      border: none;
+      color: #F44336;
+      cursor: pointer;
+      font-size: 1.5em;
+      padding: 0 5px;
+    }
+    
+    .video-warning {
+      background-color: #fff3cd;
+      color: #856404;
+      padding: 12px 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-size: 0.9em;
+      border-left: 4px solid #ffc107;
+    }
+    
+    .selection-info {
+      background-color: #e8f4fc;
+      color: #0a6ebd;
+      padding: 10px 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-size: 0.9em;
+      border-left: 4px solid #2196F3;
+    }
+    
+    .footer-note {
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      font-size: 0.3rem;
+      color: #4f3c3c;
+      z-index: 9999;
+    }
+    
+    .submit-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+    }
+    
+    .submit-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .submit-button:active {
+      transform: translateY(0);
+    }
+    
+    /* Paper airplane logosunu büyütme */
+    .submit-button span:last-child {
+      font-size: 1.4em;
+      transition: transform 0.3s ease;
+    }
+    
+    .submit-button:hover span:last-child {
+      transform: translateX(3px);
+    }
