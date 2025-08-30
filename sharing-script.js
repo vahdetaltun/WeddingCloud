@@ -28,8 +28,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
   const MAX_IMAGE_COUNT = 10; // Maksimum 10 resim
   const MAX_TOTAL_IMAGE_SIZE = 100 * 1024 * 1024; // Toplam 100MB
-  const UPLOAD_TIMEOUT = 300000; // 5 dakika (300000 ms)
-  const FILE_READ_TIMEOUT = 120000; // 2 dakika (120000 ms)
 
   let mediaRecorder;
   let audioChunks = [];
@@ -38,7 +36,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let base64Images = [];
   let base64Videos = [];
   let totalImageSize = 0;
-  let selectedFiles = [];
+  let selectedFiles = []; // Seçilen dosyaları takip etmek için
 
   // Kalp animasyonu oluştur
   function createHearts() {
@@ -70,77 +68,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     toastContainer.appendChild(toast);
     
+    // Toast'ı göster
     setTimeout(() => toast.classList.add('show'), 10);
     
+    // Toast'ı kaldır
     setTimeout(() => {
       toast.classList.remove('show');
       setTimeout(() => toastContainer.removeChild(toast), 300);
     }, 5000);
-  }
-
-  // Timeout'lu FileReader fonksiyonu
-  function readFileWithTimeout(file, timeout = FILE_READ_TIMEOUT) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        const timer = setTimeout(() => {
-            reader.abort();
-            reject(new Error(`Dosya okuma zaman aşımı (${timeout/1000} saniye)`));
-        }, timeout);
-
-        reader.onload = () => {
-            clearTimeout(timer);
-            resolve(reader.result);
-        };
-
-        reader.onerror = () => {
-            clearTimeout(timer);
-            reject(reader.error);
-        };
-
-        reader.onabort = () => {
-            reject(new Error('Dosya okuma iptal edildi'));
-        };
-
-        reader.readAsDataURL(file);
-    });
-  }
-
-  // Timeout'lu fetch işlemi
-  async function fetchWithTimeout(url, options, timeout = UPLOAD_TIMEOUT) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    
-    try {
-        const response = await fetch(url, {
-            ...options,
-            signal: controller.signal
-        });
-        clearTimeout(id);
-        return response;
-    } catch (error) {
-        clearTimeout(id);
-        if (error.name === 'AbortError') {
-            throw new Error(`İstek zaman aşımı (${timeout/1000} saniye)`);
-        }
-        throw error;
-    }
-  }
-
-  // Mikrofon izni kontrolü
-  async function checkMicrophonePermission() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-        return true;
-    } catch (error) {
-        return false;
-    }
-  }
-
-  // Android tarayıcı kontrolü
-  function isAndroid() {
-    const ua = navigator.userAgent.toLowerCase();
-    return ua.includes('android');
   }
 
   // Popup kapat, form göster
@@ -152,8 +87,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // İsim doğrulama fonksiyonu
   function isValidName(name) {
+    // Sadece nokta, virgül, tire gibi karakterlerden oluşan isimleri engelle
     const invalidPattern = /^[.,\-_\s]+$/;
+    // En az 2 karakter ve geçerli harfler/kelimeler içermeli
     const validPattern = /^[a-zA-ZçÇğĞıİöÖşŞüÜ\s]{2,}$/;
+    
     return !invalidPattern.test(name) && validPattern.test(name);
   }
 
@@ -171,18 +109,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
       hideStatus();
       
+      // Tür değiştiğinde bildirim göster
       const typeNames = {
-        text: "metin mesajı",
-        audio: "ses kaydı",
-        image: "fotoğraf",
-        video: "video"
+        text: "Metin mesajı",
+        audio: "Ses kaydı",
+        image: "Fotoğraf",
+        video: "Video"
       };
       showToast(`${typeNames[type]} paylaşımı seçildi. ✨`, "info");
     });
   });
 
   // Çoklu resim seçimi ve önizleme
-  imageInput.addEventListener('change', async function(e) {
+  imageInput.addEventListener('change', function(e) {
     const files = Array.from(e.target.files);
     base64Images = [];
     selectedFiles = [];
@@ -192,12 +131,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (files.length === 0) return;
 
+    // Dosya sayısı kontrolü
     if (files.length > MAX_IMAGE_COUNT) {
       showToast(`En fazla ${MAX_IMAGE_COUNT} fotoğraf seçebilirsiniz. ❌`, "error");
       this.value = '';
       return;
     }
 
+    // Toplam boyut kontrolü
     const totalSize = files.reduce((total, file) => total + file.size, 0);
     if (totalSize > MAX_TOTAL_IMAGE_SIZE) {
       showToast("Toplam dosya boyutu 100MB sınırını aşıyor. ❌", "error");
@@ -205,6 +146,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
+    // Dosya boyutu kontrolü
     const oversizedFiles = files.filter(file => file.size > MAX_FILE_SIZE);
     if (oversizedFiles.length > 0) {
       showToast("Bazı dosyalar 100MB sınırından büyük. ❌", "error");
@@ -212,12 +154,15 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
+    // Seçim bilgisini göster
     imageSelectionInfo.style.display = 'block';
     imageSelectionInfo.innerHTML = `📊 ${files.length} fotoğraf seçildi - Toplam: ${formatFileSize(totalSize)}`;
 
-    for (const [index, file] of files.entries()) {
-      try {
-        const base64Data = await readFileWithTimeout(file);
+    // Dosyaları işle
+    files.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const base64Data = event.target.result;
         base64Images.push(base64Data);
         selectedFiles.push({
           base64: base64Data,
@@ -226,6 +171,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         totalImageSize += file.size;
 
+        // Dosya bilgisi ve önizleme göster
         const fileInfo = document.createElement('div');
         fileInfo.className = 'file-info';
         fileInfo.dataset.index = index;
@@ -241,14 +187,14 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         imagePreview.appendChild(fileInfo);
         
+        // Kaldırma butonuna olay dinleyici ekle
         const removeBtn = fileInfo.querySelector('.remove-file');
         removeBtn.addEventListener('click', function() {
           removeImage(this.dataset.index, file.size);
         });
-      } catch (error) {
-        showToast(`"${file.name}" yüklenirken hata: ${error.message} ❌`, "error");
-      }
-    }
+      };
+      reader.readAsDataURL(file);
+    });
     
     if (files.length > 0) {
       showToast(`${files.length} fotoğraf seçildi. 📸`, "success");
@@ -257,14 +203,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Resim kaldırma fonksiyonu
   function removeImage(index, size) {
+    // Dizilerden ilgili öğeyi kaldır
     base64Images.splice(index, 1);
     selectedFiles.splice(index, 1);
     
+    // DOM'dan kaldır
     const fileElement = document.querySelector(`.file-info[data-index="${index}"]`);
     if (fileElement) {
       fileElement.remove();
     }
     
+    // Tüm dosya elementlerinin index'lerini güncelle
     const fileElements = document.querySelectorAll('.file-info');
     fileElements.forEach((element, i) => {
       element.dataset.index = i;
@@ -272,7 +221,10 @@ document.addEventListener('DOMContentLoaded', function() {
       removeBtn.dataset.index = i;
     });
     
+    // Toplam boyutu güncelle
     totalImageSize -= size;
+    
+    // Seçili dosya sayısını güncelle
     const remainingImages = imagePreview.querySelectorAll('.file-info').length;
     
     if (remainingImages === 0) {
@@ -286,17 +238,19 @@ document.addEventListener('DOMContentLoaded', function() {
     showToast("Fotoğraf kaldırıldı. ❌", "info");
   }
 
-  // Video seçim işlemi
+  // Video seçim işlemi - DÜZELTİLMİŞ VERSİYON
   videoInput.addEventListener('change', function(e) {
     handleVideoSelection(e.target.files[0]);
   });
 
+  // Video seçim işlemini fonksiyona ayır
   function handleVideoSelection(file) {
-    base64Videos = [];
+    base64Videos = []; // Her seferinde array'ı temizle
     videoPreview.innerHTML = '';
 
     if (!file) return;
 
+    // Dosya boyutu kontrolü
     if (file.size > MAX_FILE_SIZE) {
       showToast("Video 100MB sınırından büyük. Daha küçük bir video seçin. ❌", "error");
       videoInput.value = '';
@@ -309,14 +263,12 @@ document.addEventListener('DOMContentLoaded', function() {
       base64Videos.push(base64Data);
       createVideoPreview(base64Data, file);
     };
-    reader.onerror = function() {
-      showToast("Video okunurken hata oluştu. ❌", "error");
-    };
     reader.readAsDataURL(file);
     
     showToast("Video seçildi. 🎬", "success");
   }
 
+  // Video önizleme oluştur
   function createVideoPreview(base64Data, file) {
     const videoElement = document.createElement('video');
     videoElement.controls = true;
@@ -348,11 +300,11 @@ document.addEventListener('DOMContentLoaded', function() {
     videoPreview.appendChild(videoElement);
   }
 
-  // Video kaldırma fonksiyonu
+  // Video kaldırma fonksiyonu - YENİ EKLENDİ
   window.removeVideo = function() {
-    base64Videos = [];
-    videoInput.value = '';
-    videoPreview.innerHTML = '';
+    base64Videos = []; // Array'ı temizle
+    videoInput.value = ''; // Input'u sıfırla
+    videoPreview.innerHTML = ''; // Önizlemeyi temizle
     showToast("Video kaldırıldı. ❌", "info");
   };
 
@@ -363,121 +315,54 @@ document.addEventListener('DOMContentLoaded', function() {
     else return (bytes / 1048576).toFixed(1) + ' MB';
   }
 
-  // SES KAYDI - ANDROID UYUMLU DÜZELTİLMİŞ VERSİYON
+  // Ses kaydı başlatma
   recordButton.addEventListener('click', async function() {
     try {
-      // HTTPS kontrolü (Android için önemli)
-      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-        showToast("Ses kaydı için HTTPS bağlantısı gereklidir. 🔒", "warning");
-        return;
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-          channelCount: 1
-        }
-      });
-
-      // Android için özel codec ayarları
-      let options = { 
-        mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 128000
-      };
-
-      if (isAndroid()) {
-        const androidCodecs = [
-          'audio/webm',
-          'audio/mp4',
-          'audio/wav',
-          'audio/ogg',
-          'audio/3gpp'
-        ];
-
-        for (const codec of androidCodecs) {
-          if (MediaRecorder.isTypeSupported(codec)) {
-            options.mimeType = codec;
-            break;
-          }
-        }
-      }
+      // Tarayıcıya göre uygun format seç
+      let options = { mimeType: "audio/webm" }; // varsayılan
+      if (MediaRecorder.isTypeSupported("audio/mp4")) options = { mimeType: "audio/mp4" }; // Safari / iOS
+      else if (MediaRecorder.isTypeSupported("audio/wav")) options = { mimeType: "audio/wav" }; // diğer
+      else if (MediaRecorder.isTypeSupported("audio/3gpp")) options = { mimeType: "audio/3gpp" }; // Android eski
 
       mediaRecorder = new MediaRecorder(stream, options);
       audioChunks = [];
 
       mediaRecorder.ondataavailable = function(e) {
-        if (e.data.size > 0) {
-          audioChunks.push(e.data);
-        }
+        audioChunks.push(e.data);
       };
 
       mediaRecorder.onstop = function() {
-        const audioBlob = new Blob(audioChunks, { 
-          type: mediaRecorder.mimeType || 'audio/webm'
-        });
-        
+        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
         const audioUrl = URL.createObjectURL(audioBlob);
         audioPreview.src = audioUrl;
         audioPreview.style.display = 'block';
 
         const reader = new FileReader();
         reader.onloadend = function() {
-          audioDataInput.value = reader.result;
+          audioDataInput.value = reader.result; // Base64 olarak sakla
         };
         reader.readAsDataURL(audioBlob);
-        
-        stream.getTracks().forEach(track => track.stop());
       };
 
-      mediaRecorder.onerror = function(event) {
-        console.error('MediaRecorder error:', event.error);
-        showToast("Ses kaydı sırasında hata oluştu. 🎤", "error");
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start(1000);
+      mediaRecorder.start();
       recordButton.disabled = true;
       stopButton.style.display = 'inline-block';
-      recordButton.classList.add('recording');
-      showToast("Ses kaydı başladı... Konuşmaya başlayabilirsiniz! 🎤", "info");
-
+      showToast("Ses kaydı başladı... 🎤", "info");
     } catch (err) {
-      console.error('Microphone error:', err);
-      
-      let errorMessage = "Mikrofona erişim izni vermeniz gerekiyor. 🎤";
-      
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        errorMessage = "Mikrofon erişimi engellendi. Lütfen tarayıcı ayarlarından izin verin. 🔒";
-      } else if (err.name === 'NotFoundError') {
-        errorMessage = "Mikrofon bulunamadı. 🎤";
-      } else if (err.name === 'NotReadableError') {
-        errorMessage = "Mikrofon başka bir uygulama tarafından kullanılıyor. 📱";
-      }
-      
-      showToast(errorMessage, "error");
-      
-      if (isAndroid()) {
-        setTimeout(() => {
-          showToast("Android: Chrome ayarları > Site ayarları > Mikrofon iznini kontrol edin. ⚙️", "info");
-        }, 2000);
-      }
+      showToast("Mikrofona erişim izni vermeniz gerekiyor. 🎤", "error");
     }
   });
 
   // Ses kaydını durdurma
   stopButton.addEventListener('click', function() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      try {
-        mediaRecorder.stop();
-        recordButton.disabled = false;
-        stopButton.style.display = 'none';
-        recordButton.classList.remove('recording');
-        showToast("Ses kaydı tamamlandı. 🎶", "success");
-      } catch (error) {
-        showToast("Kayıt durdurulurken hata oluştu. 🔴", "error");
-      }
+      mediaRecorder.stop();
+      recordButton.disabled = false;
+      stopButton.style.display = 'none';
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      showToast("Ses kaydı tamamlandı. 🎶", "success");
     }
   });
 
@@ -490,13 +375,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const message = document.getElementById('message').value.trim();
     const audioData = audioDataInput.value;
 
+    // İsim doğrulama
     if (!name) { 
       showToast("Lütfen isminizi yazın ki anınızı kime saklayacağımızı bilelim. 😊", "error"); 
       return; 
     }
     
     if (!isValidName(name)) {
-      showToast("Lütfen geçerli bir isim girin. ❌", "error");
+      showToast("Lütfen geçerli bir isim girin. Sadece özel karakterler içeren isimler kabul edilemez. ❌", "error");
       return;
     }
     
@@ -536,11 +422,7 @@ document.addEventListener('DOMContentLoaded', function() {
     hideStatus();
 
     try {
-      const response = await fetchWithTimeout(SCRIPT_URL, { 
-        method: 'POST', 
-        body: formData 
-      }, UPLOAD_TIMEOUT);
-      
+      const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
 
@@ -567,11 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
         showToast("Bir şeyler ters gitti. Lütfen daha sonra tekrar deneyin. 😔", "error");
       }
     } catch (error) {
-      if (error.message.includes('zaman aşımı')) {
-        showToast("İşlem çok uzun sürdü, lütfen daha sonra tekrar deneyin. ⏰", "error");
-      } else {
-        showToast("Bağlantı hatası oluştu. Lütfen internet bağlantınızı kontrol edin. 🌐", "error");
-      }
+      showToast("Bağlantı hatası oluştu. Lütfen internet bağlantınızı kontrol edin. 🌐", "error");
       console.error('Error:', error);
     } finally {
       loader.style.display = 'none';
@@ -590,12 +468,4 @@ document.addEventListener('DOMContentLoaded', function() {
     statusMessage.style.display = 'none';
     statusMessage.textContent = '';
   }
-
-  // Sayfa yüklendiğinde mikrofon iznini kontrol et
-  setTimeout(async () => {
-    const hasPermission = await checkMicrophonePermission();
-    if (!hasPermission && isAndroid()) {
-      showToast("Ses kaydı için mikrofon erişimine izin vermeniz gerekiyor. 🎤", "info");
-    }
-  }, 2000);
 });
